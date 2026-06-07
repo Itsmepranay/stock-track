@@ -1,0 +1,12 @@
+python-dotenv
+feedparser
+tenacity
+snowflake-connector-python
+langchain
+langchain-google-genai
+langchain-core
+pydantic
+streamlit
+pandas
+prefect
+
