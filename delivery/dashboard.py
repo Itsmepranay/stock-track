@@ -1,5 +1,4 @@
 import json
-from datetime import date
 import streamlit as st
 import snowflake.connector
 import pandas as pd
@@ -18,15 +17,22 @@ SENTIMENT_COLOR = {
 }
 
 
-@st.cache_resource
-def get_connection():
-    return snowflake.connector.connect(**st.secrets["snowflake"])
+def _run_query(query: str) -> pd.DataFrame:
+    """Run a query using native snowflake cursor, return DataFrame. No SQLAlchemy needed."""
+    creds = st.secrets["snowflake"]
+    conn  = snowflake.connector.connect(**creds)
+    cur   = conn.cursor()
+    cur.execute(query)
+    rows  = cur.fetchall()
+    cols  = [desc[0].upper() for desc in cur.description]
+    cur.close()
+    conn.close()
+    return pd.DataFrame(rows, columns=cols)
 
 
 @st.cache_data(ttl=300)
 def load_summaries(run_date: str) -> pd.DataFrame:
-    conn = get_connection()
-    return pd.read_sql(f"""
+    df = _run_query(f"""
         SELECT
             s.ticker,
             s.company_name,
@@ -45,19 +51,29 @@ def load_summaries(run_date: str) -> pd.DataFrame:
             ROUND(s.current_price * h.qty, 2) AS current_value
         FROM PORTFOLIO_SUMMARIES s
         LEFT JOIN PORTFOLIO_HOLDINGS h
-            ON  s.ticker     = h.ticker
-            AND h.is_active  = TRUE
+            ON  s.ticker    = h.ticker
+            AND h.is_active = TRUE
         WHERE s.run_date = '{run_date}'
         ORDER BY s.ticker
-    """, conn)
+    """)
+
+    # Fill NaN safely
+    df["BUY_PRICE"]      = pd.to_numeric(df["BUY_PRICE"],      errors="coerce").fillna(0)
+    df["QTY"]            = pd.to_numeric(df["QTY"],            errors="coerce").fillna(0).astype(int)
+    df["INVESTED_VALUE"] = pd.to_numeric(df["INVESTED_VALUE"], errors="coerce").fillna(0)
+    df["CURRENT_VALUE"]  = pd.to_numeric(df["CURRENT_VALUE"],  errors="coerce").fillna(0)
+    df["PNL"]            = pd.to_numeric(df["PNL"],            errors="coerce").fillna(0)
+    df["PNL_PCT"]        = pd.to_numeric(df["PNL_PCT"],        errors="coerce").fillna(0)
+    df["CHANGE_PCT"]     = pd.to_numeric(df["CHANGE_PCT"],     errors="coerce").fillna(0)
+    df["CURRENT_PRICE"]  = pd.to_numeric(df["CURRENT_PRICE"],  errors="coerce").fillna(0)
+
+    return df
 
 
 @st.cache_data(ttl=300)
 def load_available_dates() -> list[str]:
-    conn = get_connection()
-    df = pd.read_sql(
-        "SELECT DISTINCT run_date FROM PORTFOLIO_SUMMARIES ORDER BY run_date DESC LIMIT 30",
-        conn,
+    df = _run_query(
+        "SELECT DISTINCT run_date FROM PORTFOLIO_SUMMARIES ORDER BY run_date DESC LIMIT 30"
     )
     return df["RUN_DATE"].astype(str).tolist()
 
@@ -92,14 +108,13 @@ def main():
     overall_summary   = df["OVERALL_SUMMARY"].iloc[0]
     overall_sentiment = df["OVERALL_SENTIMENT"].iloc[0]
 
-    # ── Portfolio level totals (all live from DB) ─────────────
+    # ── Portfolio level totals ────────────────────────────────
     total_invested = df["INVESTED_VALUE"].sum()
     total_current  = df["CURRENT_VALUE"].sum()
     total_pnl      = df["PNL"].sum()
     total_pnl_pct  = round(((total_current - total_invested) / total_invested) * 100, 2) if total_invested else 0
     n_bullish      = (df["SENTIMENT"] == "BULLISH").sum()
     n_bearish      = (df["SENTIMENT"] == "BEARISH").sum()
-    port_color     = "#1D9E75" if total_pnl >= 0 else "#E24B4A"
 
     st.divider()
 
@@ -112,13 +127,13 @@ def main():
     with c3:
         st.metric(
             "Total P&L",
-            f"₹{abs(total_pnl):,.0f}",
-            delta=f"{arrow(total_pnl)} {total_pnl_pct:+.2f}%",
+            f"{arrow(total_pnl)} ₹{abs(total_pnl):,.0f}",
+            delta=f"{total_pnl_pct:+.2f}%",
         )
     with c4:
-        st.metric("Bullish", n_bullish)
+        st.metric("Bullish", int(n_bullish))
     with c5:
-        st.metric("Bearish", n_bearish)
+        st.metric("Bearish", int(n_bearish))
 
     st.divider()
 
@@ -136,18 +151,18 @@ def main():
     st.markdown("### Holdings")
 
     for _, row in df.iterrows():
-        pnl           = row["PNL"]
-        pnl_pct       = row["PNL_PCT"]
-        chg           = row["CHANGE_PCT"]
-        buy_price     = row["BUY_PRICE"]
-        qty           = int(row["QTY"])
-        invested_val  = row["INVESTED_VALUE"]
-        current_val   = row["CURRENT_VALUE"]
-        pnl_color     = "#1D9E75" if pnl >= 0 else "#E24B4A"
-        chg_color     = "#1D9E75" if chg >= 0 else "#E24B4A"
+        pnl          = row["PNL"]
+        pnl_pct      = row["PNL_PCT"]
+        chg          = row["CHANGE_PCT"]
+        buy_price    = row["BUY_PRICE"]
+        qty          = row["QTY"]
+        invested_val = row["INVESTED_VALUE"]
+        current_val  = row["CURRENT_VALUE"]
+        pnl_color    = "#1D9E75" if pnl >= 0 else "#E24B4A"
+        chg_color    = "#1D9E75" if chg >= 0 else "#E24B4A"
 
         with st.container(border=True):
-            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
+            col1, col2, col3, col4, _ = st.columns([2, 2, 2, 2, 1])
 
             with col1:
                 st.markdown(f"**{row['TICKER']}**")
@@ -178,13 +193,7 @@ def main():
                 )
 
             with col4:
-                st.markdown(
-                    sentiment_badge(row["SENTIMENT"]),
-                    unsafe_allow_html=True,
-                )
-
-            with col5:
-                pass
+                st.markdown(sentiment_badge(row["SENTIMENT"]), unsafe_allow_html=True)
 
             if row["SUMMARY_TEXT"]:
                 st.caption(row["SUMMARY_TEXT"])
