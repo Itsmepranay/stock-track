@@ -3,10 +3,9 @@ feedparser
 tenacity
 snowflake-connector-python
 langchain
-langchain-google-genai
+langchain-nvidia-ai-endpoints
 langchain-core
 pydantic
 streamlit
 pandas
 prefect
-

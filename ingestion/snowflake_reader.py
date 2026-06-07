@@ -80,8 +80,10 @@ def get_ohlcv(tickers: list[str], run_date: Optional[date] = None) -> dict[str, 
             d = dict(zip(cols, row))
             symbol = d["symbol"]
             # Calculate price change percentage if close and fifty_two_week_low available
-            if d.get("close") and d.get("fifty_two_week_low"):
-                d["change_pct"] = round(((d["close"] - d["fifty_two_week_low"]) / d["fifty_two_week_low"]) * 100, 2)
+            if d.get("close") and d.get("open"):
+                d["change_pct"] = round(
+                    ((d["close"] - d["open"]) / d["open"]) * 100, 2
+                )
             else:
                 d["change_pct"] = 0.0
             result[symbol] = d

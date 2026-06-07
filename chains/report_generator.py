@@ -1,11 +1,12 @@
 import logging
-import google.genai as genai
-from config.settings import GEMINI_API_KEY, GEMINI_MODEL
+from langchain_core.prompts import ChatPromptTemplate
+from llm_factory import get_llm
 
 logger = logging.getLogger(__name__)
-client = genai.Client(api_key=GEMINI_API_KEY)
 
-REPORT_PROMPT = """\
+llm = get_llm()
+
+REPORT_PROMPT = ChatPromptTemplate.from_template("""\
 You are a senior equity analyst. Write a concise overall portfolio summary for {run_date}.
 
 Portfolio holdings and their individual summaries:
@@ -17,7 +18,7 @@ Write 2-3 sentences covering:
 3. Any sector-level theme emerging from today's news
 
 Analyst tone, factual, no clichés. Do not list individual stocks — those appear separately below.
-"""
+""")
 
 
 def _format_holdings_for_report(holdings: list[dict]) -> str:
@@ -30,10 +31,6 @@ def _format_holdings_for_report(holdings: list[dict]) -> str:
 
 
 def _collect_citations(holdings: list[dict]) -> list[dict]:
-    """
-    Collect all unique articles across holdings as citation objects.
-    Returns list of {title, url, source_name, sentiment, matched_tickers}.
-    """
     seen = set()
     citations = []
     for h in holdings:
@@ -71,22 +68,15 @@ def _overall_sentiment(holdings: list[dict]) -> str:
 
 
 def generate_report(context: dict) -> dict:
-    """
-    Generate the final portfolio report.
-    Adds to context:
-        overall_summary: str
-        overall_sentiment: str
-        citations: list[dict]
-    Returns updated context.
-    """
     holdings = context["holdings"]
-    prompt = REPORT_PROMPT.format(
-        run_date=context["run_date"],
-        holdings_text=_format_holdings_for_report(holdings),
-    )
+    prompt_vars = {
+        "run_date":     context["run_date"],
+        "holdings_text": _format_holdings_for_report(holdings),
+    }
     try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        context["overall_summary"] = response.text.strip()
+        chain = REPORT_PROMPT | llm
+        response = chain.invoke(prompt_vars)
+        context["overall_summary"] = response.content.strip()
     except Exception as e:
         logger.error(f"Report generation failed: {e}")
         context["overall_summary"] = "Overall portfolio summary unavailable today."

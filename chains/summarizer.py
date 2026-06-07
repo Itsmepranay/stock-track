@@ -2,7 +2,6 @@ import logging
 
 from tenacity import retry, wait_exponential, stop_after_attempt
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
 from config.settings import GEMINI_API_KEY, GEMINI_MODEL

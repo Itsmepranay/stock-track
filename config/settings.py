@@ -28,10 +28,6 @@ GEMINI_MODEL    = "gemini-2.5-flash"
 MAX_ARTICLES_PER_RUN = 20   # cap to control token cost
 
 import os
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 
-XAI_API_KEY = os.getenv("XAI_API_KEY")
-
-LLM_MODEL = os.getenv(
-    "LLM_MODEL",
-    "grok-3-mini"
-)
+LLM_MODEL='meta/llama-3.3-70b-instruct'

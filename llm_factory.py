@@ -1,12 +1,11 @@
-from langchain_openai import ChatOpenAI
-from config.settings import XAI_API_KEY, LLM_MODEL
-
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from config.settings import NVIDIA_API_KEY, LLM_MODEL
 
 def get_llm():
-
-    return ChatOpenAI(
-        api_key=XAI_API_KEY,
-        base_url="https://api.x.ai/v1",
+    return ChatNVIDIA(
+        api_key=NVIDIA_API_KEY,
         model=LLM_MODEL,
         temperature=0,
+        top_p=0.8,
+        max_tokens=4096,
     )
